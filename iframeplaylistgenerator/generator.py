@@ -1,20 +1,56 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 """
 Takes a variant m3u8 playlist, creates I-frame playlists for it, and
 creates an updated master playlist with links to the new I-frame playlists.
 """
 
+import os.path
+import urlparse as url_parser
+import sys
+import argparse
 import subprocess
 import json
+import m3u8_gzip as m3u8
+import logging
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
-import m3u8
 
-from .exceptions import (
-    PlaylistLoadError, BadPlaylistError,
-    DependencyError, DataError
-)
+class GenericError(Exception):
+    """
+    Generic error
+    """
+    def __str__(self):
+        return "%s(%s)" % (self.__class__.__name__, self.args)
+
+
+class BadPlaylistError(GenericError):
+    """
+    Error raised when the playlist is unusable
+    """
+
+
+class PlaylistLoadError(GenericError):
+    """
+    Error raised when loading the playlist failed
+    """
+
+
+class DataError(GenericError):
+    """
+    Error raised when reading transport stream data failed
+    """
+
+
+class DependencyError(GenericError):
+    """
+    Error raised when a dependency is not installed
+    """
 
 
 def update_for_iframes(url):
+    logging.info('update_for_iframes')
     """
     Returns an updated master playlist and new I-frame playlists
     """
@@ -48,6 +84,7 @@ def create_iframe_playlist(playlist):
     """
     Creates a new I-frame playlist.
     """
+    logging.info('create_iframe_playlist')
     try:
         subprocess.check_output('ffprobe -version', stderr=subprocess.STDOUT,
                                 shell=True)
@@ -95,6 +132,7 @@ def create_iframe_playlist(playlist):
 
 
 def generate_m3u8_for_iframes():
+    logging.info('generate_m3u8_for_iframes')
     """
     Generates an M3U8 object to be used for an I-frame playlist
     """
@@ -109,6 +147,7 @@ def generate_m3u8_for_iframes():
 
 
 def create_iframe_segments(segment):
+    logging.info('create_iframe_segments')
     """
     Takes a transport stream segment and returns I-frame segments for it
     """
@@ -151,6 +190,7 @@ def create_iframe_segments(segment):
 
 
 def get_segment_data(url):
+    logging.info('get_segment_data')
     """
     Returns data about a transport stream.
     """
@@ -181,6 +221,7 @@ def get_segment_data(url):
 
 
 def run_ffprobe(filename):
+    logging.info('run_ffprobe')
     """
     Runs an ffprobe on a transport stream and
     returns a string of the results in json format.
@@ -194,6 +235,7 @@ def run_ffprobe(filename):
 
 
 def convert_codecs_for_iframes(codecs):
+    logging.info('convert_codecs_for_iframes')
     """
     Takes a codecs string, converts it for iframes, and returns it
     """
@@ -202,3 +244,50 @@ def convert_codecs_for_iframes(codecs):
         return ', '.join([k.strip() for k in codecs_list if 'avc1' in k])
     else:
         return None
+
+def main(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-o', '--output', help="iframe playlist filename")
+    parser.add_argument('input', nargs='+', help="m3u8 file")
+    args = vars(parser.parse_args())
+
+    if args["output"] == None:
+        print "Output filename required"
+        sys.exit(3)
+
+    had_output = False
+    for inputfile in args["input"]:
+        outputfile = args["output"]
+        logging.info('Processing M3U8: %s', inputfile)
+
+        playlist_data = update_for_iframes(inputfile)
+        logging.info('Processing completed.')
+
+        logging.info('Saving master content...')
+        f = open(outputfile, 'w')
+        f.write(playlist_data['master_content'])
+        f.close()
+
+        dir = os.path.dirname(outputfile)
+        logging.info('Saving iframe playlists | %s', dir)
+        for playlist in playlist_data['iframe_playlists']:
+            parsed = url_parser.urlparse(playlist['uri'])
+            filename = dir + parsed.path
+            logging.info('iframe playlist | %s', filename)
+            if not os.path.exists(os.path.dirname(filename)):
+                try:
+                    os.makedirs(os.path.dirname(filename))
+                except OSError as exc: # Guard against race condition
+                    if exc.errno != errno.EEXIST:
+                        raise
+            f = open(filename, 'w')
+            f.write(playlist['content'])
+            f.close()
+
+        logging.info('Completed!')
+
+    if not had_output:
+        sys.exit(4)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

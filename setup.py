@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 from setuptools import setup
 
 setup(
@@ -6,9 +9,9 @@ setup(
     author='Peter Norton',
     author_email='peter@nortoncrew.com',
     packages=['iframeplaylistgenerator'],
-    url='https://github.com/pbs/iframe-playlist-generator',
+    url='https://github.com/nweber/iframe-playlist-generator',
     description='HLS I-frame playlist generator',
     long_description=open('README.rst').read(),
-    install_requires=['m3u8==0.1.7b'],
-    dependency_links=['https://github.com/pbs/m3u8/tarball/master#egg=m3u8-0.1.7b'],
+    install_requires=['m3u8_gzip>=0.4.0'],
+    dependency_links=['https://github.com/nweber/m3u8-gzip/tarball/master#egg=m3u8_gzip-0.4.0']
 )
